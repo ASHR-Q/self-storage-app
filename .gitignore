@@ -1,0 +1,13 @@
+# Maven build output
+target/
+backend/target/
+
+# Temporary editor backup files
+*~
+
+# IDE files
+.idea/
+.vscode/
+
+# Operating system files
+.DS_Store
