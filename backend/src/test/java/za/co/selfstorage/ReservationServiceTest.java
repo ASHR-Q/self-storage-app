@@ -9,7 +9,7 @@ class ReservationServiceTest {
 
     @Test
     void shouldCreateReservation() {
-        ReservationService service = new ReservationService();
+        ReservationService service = createService();
 
         Reservation reservation = service.createReservation(
                 "customer-1",
@@ -29,7 +29,7 @@ class ReservationServiceTest {
    
 @Test
 void shouldRejectOverlappingReservations() {
-    ReservationService service = new ReservationService();
+   ReservationService service = createService();
 
     service.createReservation(
             "customer-1",
@@ -50,7 +50,7 @@ void shouldRejectOverlappingReservations() {
 
 @Test
 void shouldAllowReservationsForDifferentDates() {
-    ReservationService service = new ReservationService();
+    ReservationService service = createService();
 
     service.createReservation(
             "customer-1",
@@ -72,7 +72,7 @@ void shouldAllowReservationsForDifferentDates() {
 
 @Test
 void shouldAllowReservationsForDifferentUnitsOnSameDates() {
-    ReservationService service = new ReservationService();
+    ReservationService service = createService();
 
     service.createReservation(
             "customer-1",
@@ -90,6 +90,51 @@ void shouldAllowReservationsForDifferentUnitsOnSameDates() {
 
     assertNotNull(secondReservation);
     assertEquals("A102", secondReservation.getUnitId());
+}
+
+private ReservationService createService() {
+    StorageUnitRepository repository = new StorageUnitRepository();
+
+    repository.add(new StorageUnit("A101", "Small", 500.00));
+    repository.add(new StorageUnit("A102", "Medium", 700.00));
+
+    return new ReservationService(repository);
+}
+
+@Test
+void shouldRejectReservationForNonExistentStorageUnit() {
+    ReservationService service = createService();
+
+    assertThrows(
+            IllegalArgumentException.class,
+            () -> service.createReservation(
+                    "customer1",
+                    "A999",
+                    LocalDate.of(2026, 11, 1),
+                    LocalDate.of(2026, 12, 1)
+            )
+    );
+}
+
+@Test
+void shouldRejectReservationForUnavailableStorageUnit() {
+    StorageUnitRepository repository = new StorageUnitRepository();
+
+    StorageUnit unit = new StorageUnit("A101", "Small", 500.00);
+    unit.setAvailable(false);
+    repository.add(unit);
+
+    ReservationService service = new ReservationService(repository);
+
+    assertThrows(
+            IllegalArgumentException.class,
+            () -> service.createReservation(
+                    "customer1",
+                    "A101",
+                    LocalDate.of(2026, 11, 1),
+                    LocalDate.of(2026, 12, 1)
+            )
+    );
 }
 
 }

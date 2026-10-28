@@ -7,13 +7,26 @@ import java.util.List;
 public class ReservationService {
 
     private final List<Reservation> reservations = new ArrayList<>();
+    private final StorageUnitRepository storageUnitRepository;
 
+    public ReservationService(StorageUnitRepository storageUnitRepository) {
+    this.storageUnitRepository = storageUnitRepository;
+}
     public Reservation createReservation(
             String customerId,
             String unitId,
             LocalDate startDate,
             LocalDate endDate
     ) {
+	StorageUnit unit = storageUnitRepository.findById(unitId)
+        .orElseThrow(() -> new IllegalArgumentException(
+                "Storage unit does not exist: " + unitId
+        ));
+	if (!unit.isAvailable()) {
+    throw new IllegalArgumentException(
+            "Storage unit is not available: " + unitId
+    );
+}
         for (Reservation existing : reservations) {
             boolean sameUnit = existing.getUnitId().equals(unitId);
 
@@ -30,20 +43,20 @@ public class ReservationService {
                 );
             }
         }
-
-        Reservation reservation = new Reservation(
-                customerId,
-                unitId,
-                startDate,
-                endDate
-        );
+	Reservation reservation = new Reservation(
+        customerId,
+        unit.getUnitId(),
+        startDate,
+        endDate
+);	
 
         reservations.add(reservation);
 
-        return reservation;
+return reservation;
     }
 
     public List<Reservation> getReservations() {
         return List.copyOf(reservations);
     }
 }
+
