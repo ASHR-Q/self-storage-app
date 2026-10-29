@@ -1,0 +1,289 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Self-storage REST API, customer identity, web hosting, and notifications.
+
+Parameters:
+  CognitoDomainPrefix:
+    Type: String
+    MinLength: 1
+    MaxLength: 63
+    AllowedPattern: "^[a-z0-9-]+$"
+    Description: Globally unique, lowercase Cognito hosted UI domain prefix.
+  NotificationEmail:
+    Type: String
+    Default: ""
+    Description: Optional email recipient for new-reservation notifications.
+
+Conditions:
+  HasNotificationEmail: !Not [!Equals [!Ref NotificationEmail, ""]]
+
+Globals:
+  Function:
+    Runtime: java21
+    MemorySize: 512
+    Timeout: 20
+    Architectures:
+      - arm64
+
+Resources:
+  StorageTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  CustomerUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${AWS::StackName}-customers"
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+
+  CustomerUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub "${AWS::StackName}-web"
+      UserPoolId: !Ref CustomerUserPool
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      AllowedOAuthFlowsUserPoolClient: true
+      SupportedIdentityProviders:
+        - COGNITO
+      CallbackURLs:
+        - !Sub "https://${FrontendDistribution.DomainName}/"
+      LogoutURLs:
+        - !Sub "https://${FrontendDistribution.DomainName}/"
+
+  CustomerUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref CognitoDomainPrefix
+      UserPoolId: !Ref CustomerUserPool
+
+  ReservationApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - authorization
+          - content-type
+        AllowMethods:
+          - GET
+          - POST
+          - DELETE
+          - OPTIONS
+      Auth:
+        Authorizers:
+          CognitoAuthorizer:
+            IdentitySource: "$request.header.Authorization"
+            JwtConfiguration:
+              issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${CustomerUserPool}"
+              audience:
+                - !Ref CustomerUserPoolClient
+
+  ReservationApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: za.co.selfstorage.ApiHandler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref StorageTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref StorageTable
+      Events:
+        ListUnits:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ReservationApi
+            Path: /units
+            Method: GET
+        ListReservations:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ReservationApi
+            Path: /reservations
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        CreateReservation:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ReservationApi
+            Path: /reservations
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        CancelReservation:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ReservationApi
+            Path: /reservations/{reservationId}
+            Method: DELETE
+            Auth:
+              Authorizer: CognitoAuthorizer
+
+  ReservationNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${AWS::StackName}-reservation-notifications"
+
+  ReservationNotificationEmail:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+      TopicArn: !Ref ReservationNotifications
+
+  ReservationNotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: za.co.selfstorage.NotificationHandler
+      Environment:
+        Variables:
+          NOTIFICATION_TOPIC_ARN: !Ref ReservationNotifications
+      Policies:
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt ReservationNotifications.TopicName
+      Events:
+        ReservationStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt StorageTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+            MaximumRetryAttempts: 3
+            BisectBatchOnFunctionError: true
+
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+
+  FrontendOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-frontend-oac"
+        Description: Private S3 access for the self-storage frontend.
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  FrontendDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_100
+        HttpVersion: http2
+        IPV6Enabled: true
+        Origins:
+          - Id: FrontendS3Origin
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt FrontendOriginAccessControl.Id
+        DefaultCacheBehavior:
+          TargetOriginId: FrontendS3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          ForwardedValues:
+            QueryString: false
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${FrontendBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${FrontendDistribution}"
+
+Outputs:
+  ApiUrl:
+    Description: Base URL for the HTTP API.
+    Value: !Sub "https://${ReservationApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
+  UserPoolId:
+    Description: Cognito customer user pool ID.
+    Value: !Ref CustomerUserPool
+  UserPoolClientId:
+    Description: Public Cognito app client ID.
+    Value: !Ref CustomerUserPoolClient
+  CognitoDomain:
+    Description: Cognito hosted UI base URL.
+    Value: !Sub "https://${CognitoDomainPrefix}.auth.${AWS::Region}.amazoncognito.com"
+  FrontendBucketName:
+    Description: Private S3 bucket containing the web frontend.
+    Value: !Ref FrontendBucket
+  CloudFrontDistributionId:
+    Description: CloudFront distribution ID for cache invalidation.
+    Value: !Ref FrontendDistribution
+  FrontendUrl:
+    Description: Public HTTPS URL for the web frontend.
+    Value: !Sub "https://${FrontendDistribution.DomainName}"

@@ -1,6 +1,8 @@
 # Maven build output
 target/
 backend/target/
+.aws-sam/
+frontend/config.json
 
 # Temporary editor backup files
 *~

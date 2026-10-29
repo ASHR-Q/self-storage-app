@@ -1,0 +1,5 @@
+{
+  "apiUrl": "https://your-api-id.execute-api.your-region.amazonaws.com",
+  "cognitoDomain": "https://your-cognito-domain.auth.your-region.amazoncognito.com",
+  "clientId": "your-public-cognito-app-client-id"
+}

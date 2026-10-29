@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#153d35">
+    <title>Fieldstone Storage — Space for what matters</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Fieldstone Storage home">
+        <span class="brand-mark" aria-hidden="true">F</span>
+        <span>fieldstone<span class="brand-light"> storage</span></span>
+      </a>
+      <div class="header-actions">
+        <span id="account-label" class="account-label"></span>
+        <button id="auth-button" class="button button-outline" type="button" disabled>Loading…</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="eyebrow-dot"></span> A little more room to breathe</p>
+          <h1>Make space for<br><span>what matters.</span></h1>
+          <p class="hero-description">Simple, secure storage for every season of life. Find a space that fits, and get on with your day.</p>
+          <a class="text-link" href="#spaces">Explore our spaces <span aria-hidden="true">↓</span></a>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <div class="sun"></div>
+          <div class="storage-illustration">
+            <div class="warehouse warehouse-back"></div>
+            <div class="warehouse warehouse-front"><div class="warehouse-door"></div></div>
+            <div class="plant"><i></i><i></i><i></i><b></b></div>
+            <div class="parcel parcel-one"></div>
+            <div class="parcel parcel-two"></div>
+          </div>
+          <div class="visual-caption">YOUR NEXT CHAPTER, UNCLUTTERED</div>
+        </div>
+      </section>
+
+      <section id="spaces" class="content-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Thoughtfully sized</p>
+            <h2>Find your kind of space.</h2>
+          </div>
+          <p class="section-note">Flexible monthly pricing. No fuss, just room.</p>
+        </div>
+        <div id="unit-list" class="unit-grid" aria-live="polite">
+          <p class="loading-message">Finding your space…</p>
+        </div>
+      </section>
+
+      <section id="reservations-section" class="content-section reservation-section" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Your account</p>
+            <h2>Your reservations.</h2>
+          </div>
+        </div>
+        <div id="reservation-list" class="reservation-list" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <a class="brand brand-footer" href="/"><span class="brand-mark" aria-hidden="true">F</span><span>fieldstone<span class="brand-light"> storage</span></span></a>
+      <p>Room for the life you’re building.</p>
+    </footer>
+
+    <dialog id="reservation-dialog" class="reservation-dialog">
+      <form id="reservation-form" method="dialog">
+        <button id="dialog-close" class="dialog-close" type="button" aria-label="Close">×</button>
+        <p class="eyebrow">Make room</p>
+        <h2>Reserve your space.</h2>
+        <p id="selected-unit" class="selected-unit"></p>
+        <input id="unit-id" name="unitId" type="hidden">
+        <label for="start-date">Move-in date</label>
+        <input id="start-date" name="startDate" type="date" required>
+        <label for="end-date">Move-out date</label>
+        <input id="end-date" name="endDate" type="date" required>
+        <p id="form-error" class="form-error" role="alert"></p>
+        <button class="button button-primary button-wide" type="submit">Request reservation <span aria-hidden="true">→</span></button>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
