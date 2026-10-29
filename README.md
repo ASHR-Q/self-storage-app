@@ -49,6 +49,7 @@ All dates use `YYYY-MM-DD`; reservation end dates are exclusive. New reservation
 | `DELETE` | `/reservations/{reservationId}` | Cognito access token | Cancel one of the signed-in customer's reservations |
 
 ## Build and tests
+WTC-UC8HELDB
 
 Run the Java unit tests and package the Lambda artifact:
 
